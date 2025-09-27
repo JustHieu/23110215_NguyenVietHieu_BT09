@@ -2,35 +2,267 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8"/>
-    <title>GraphQL AJAX Demo</title>
+    <title>GraphQL + Spring Boot 3 – Demo AJAX</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px}
+        h1{margin:0 0 8px}
+        h2{margin:24px 0 8px}
+        .row{display:flex;gap:16px;flex-wrap:wrap}
+        .card{border:1px solid #ddd;border-radius:10px;padding:12px;flex:1 1 360px}
+        label{display:block;margin:.5rem 0 .25rem}
+        input,select,textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
+        button{padding:8px 12px;border:0;border-radius:8px;background:#1363df;color:white;cursor:pointer}
+        button.secondary{background:#999}
+        table{width:100%;border-collapse:collapse}
+        th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
+        .mut-cols{display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:16px}
+        @media (max-width:900px){.mut-cols{grid-template-columns:1fr}}
+        .mt8{margin-top:8px}
+        .mt12{margin-top:12px}
+        .mono{font-family:ui-monospace,Consolas,monaco,monospace}
+    </style>
 </head>
 <body>
-<h1>Products (price ↑) 23110215 Nguyễn Việt Hiếu</h1>
-<ul id="list"></ul>
+
+<h1>GraphQL + Spring Boot 3 – AJAX Demo</h1>
+<p class="mono">Endpoint: POST /graphql &nbsp;|&nbsp; Dev tool: <a href="/graphiql?path=/graphql" target="_blank">/graphiql</a></p>
+
+<!-- ============ PRODUCTS SORTED ============ -->
+<h2>1) Products – Price ↑</h2>
+<div id="sortedProducts" class="card">
+    <button id="btnLoadSorted">Tải danh sách</button>
+    <table class="mt12">
+        <thead><tr><th>ID</th><th>Title</th><th>Price</th><th>Qty</th></tr></thead>
+        <tbody id="tbodySorted"></tbody>
+    </table>
+</div>
+
+<!-- ============ PRODUCTS BY CATEGORY ============ -->
+<h2>2) Products theo Category</h2>
+<div id="byCategory" class="card">
+    <label>Chọn Category</label>
+    <div class="row">
+        <select id="selCategory" style="max-width:320px"></select>
+        <button id="btnLoadByCat">Xem product</button>
+    </div>
+    <table class="mt12">
+        <thead><tr><th>ID</th><th>Title</th><th>Price</th></tr></thead>
+        <tbody id="tbodyByCat"></tbody>
+    </table>
+</div>
+
+<!-- ============ CRUD ============ -->
+<h2>3) CRUD (User / Category / Product)</h2>
+<div class="mut-cols">
+
+    <!-- USER -->
+    <div class="card">
+        <h3>User</h3>
+        <label>Fullname</label><input id="u_fullname" />
+        <label>Email</label><input id="u_email" />
+        <label>Password</label><input id="u_password" type="password" />
+        <label>Phone</label><input id="u_phone" />
+        <label>Category IDs (phân cách bằng dấu phẩy)</label><input id="u_catIds" placeholder="1,2,3"/>
+
+        <div class="row mt12">
+            <button id="btnCreateUser">Create</button>
+            <input id="u_id_upd" placeholder="User ID cập nhật/xóa" style="max-width:160px"/>
+            <button id="btnUpdateUser" class="secondary">Update</button>
+            <button id="btnDeleteUser" class="secondary">Delete</button>
+        </div>
+        <pre id="u_result" class="mt12 mono"></pre>
+    </div>
+
+    <!-- CATEGORY -->
+    <div class="card">
+        <h3>Category</h3>
+        <label>Name</label><input id="c_name" />
+        <label>Images</label><input id="c_images" />
+        <label>User IDs</label><input id="c_userIds" placeholder="1,2" />
+        <label>Product IDs</label><input id="c_productIds" placeholder="1,3" />
+
+        <div class="row mt12">
+            <button id="btnCreateCategory">Create</button>
+            <input id="c_id_upd" placeholder="Category ID cập nhật/xóa" style="max-width:200px"/>
+            <button id="btnUpdateCategory" class="secondary">Update</button>
+            <button id="btnDeleteCategory" class="secondary">Delete</button>
+        </div>
+        <pre id="c_result" class="mt12 mono"></pre>
+    </div>
+
+    <!-- PRODUCT -->
+    <div class="card">
+        <h3>Product</h3>
+        <label>Title</label><input id="p_title" />
+        <label>Quantity</label><input id="p_quantity" type="number" value="0"/>
+        <label>Description</label><textarea id="p_desc"></textarea>
+        <label>Price</label><input id="p_price" type="number" step="0.01" />
+        <label>User ID (owner)</label><input id="p_userId" />
+        <label>Category IDs</label><input id="p_catIds" placeholder="1,2" />
+
+        <div class="row mt12">
+            <button id="btnCreateProduct">Create</button>
+            <input id="p_id_upd" placeholder="Product ID cập nhật/xóa" style="max-width:200px"/>
+            <button id="btnUpdateProduct" class="secondary">Update</button>
+            <button id="btnDeleteProduct" class="secondary">Delete</button>
+        </div>
+        <pre id="p_result" class="mt12 mono"></pre>
+    </div>
+
+</div>
 
 <script>
-    const query = `
-    query {
-      productsSortedByPrice { id title price }
+    // ------------------- helper -------------------
+    async function gql(query, variables={}) {
+        const res = await fetch("/graphql", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ query, variables })
+        });
+        const json = await res.json();
+        if (json.errors) throw json.errors;
+        return json.data;
     }
-  `;
+    const $ = (id) => document.getElementById(id);
 
-    fetch("/graphql", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ query })
-    })
-        .then(r => r.json())
-        .then(({data, errors}) => {
-            if (errors) { console.error(errors); return; }
-            const ul = document.getElementById("list");
-            data.productsSortedByPrice.forEach(p => {
-                const li = document.createElement("li");
-                li.textContent = `${p.id} - ${p.title} - ${p.price}`;
-                ul.appendChild(li);
-            });
-        })
-        .catch(console.error);
+    // ------------------- 1) Products sorted by price -------------------
+    $("btnLoadSorted").onclick = async () => {
+        try {
+            const q = `query { productsSortedByPrice { id title price quantity } }`;
+            const data = await gql(q);
+            const rows = data.productsSortedByPrice.map(p =>
+                `<tr><td>${p.id}</td><td>${p.title ?? ""}</td><td>${p.price ?? 0}</td><td>${p.quantity ?? 0}</td></tr>`
+            ).join("");
+            $("tbodySorted").innerHTML = rows;
+        } catch (e){ console.error(e); alert("Lỗi tải productsSortedByPrice"); }
+    };
+
+    // ------------------- 2) Products by Category -------------------
+    // load categories to select
+    async function loadCategoriesToSelect() {
+        const q = `query { categories { id name } }`;
+        const data = await gql(q);
+        $("selCategory").innerHTML = data.categories
+            .map(c => `<option value="${c.id}">${c.id} - ${c.name}</option>`).join("");
+    }
+    $("btnLoadByCat").onclick = async () => {
+        try {
+            const id = $("selCategory").value;
+            const q = `query($id: ID!){ productsByCategory(categoryId: $id){ id title price } }`;
+            const data = await gql(q, { id });
+            $("tbodyByCat").innerHTML = data.productsByCategory
+                .map(p => `<tr><td>${p.id}</td><td>${p.title ?? ""}</td><td>${p.price ?? 0}</td></tr>`).join("");
+        } catch (e){ console.error(e); alert("Lỗi tải productsByCategory"); }
+    };
+
+    // ------------------- 3) CRUD -------------------
+    // USER
+    $("btnCreateUser").onclick = async () => {
+        const categoryIds = parseIds($("u_catIds").value);
+        const q = `mutation($input: UserInput!){ createUser(input:$input){ id fullname email phone } }`;
+        const input = {
+            fullname: $("u_fullname").value,
+            email: $("u_email").value,
+            password: $("u_password").value,
+            phone: $("u_phone").value,
+            categoryIds
+        };
+        const data = await gql(q, { input });
+        $("u_result").textContent = JSON.stringify(data, null, 2);
+    };
+    $("btnUpdateUser").onclick = async () => {
+        const id = $("u_id_upd").value;
+        const categoryIds = parseIds($("u_catIds").value);
+        const q = `mutation($id:ID!, $input:UserInput!){ updateUser(id:$id,input:$input){ id fullname email phone } }`;
+        const input = {
+            fullname: $("u_fullname").value || null,
+            email: $("u_email").value || null,
+            password: $("u_password").value || null,
+            phone: $("u_phone").value || null,
+            categoryIds: categoryIds.length ? categoryIds : null
+        };
+        const data = await gql(q, { id, input });
+        $("u_result").textContent = JSON.stringify(data, null, 2);
+    };
+    $("btnDeleteUser").onclick = async () => {
+        const id = $("u_id_upd").value;
+        const q = `mutation($id:ID!){ deleteUser(id:$id) }`;
+        const data = await gql(q, { id });
+        $("u_result").textContent = JSON.stringify(data, null, 2);
+    };
+
+    // CATEGORY
+    $("btnCreateCategory").onclick = async () => {
+        const input = {
+            name: $("c_name").value,
+            images: $("c_images").value,
+            userIds: parseIds($("c_userIds").value),
+            productIds: parseIds($("c_productIds").value)
+        };
+        const q = `mutation($input:CategoryInput!){ createCategory(input:$input){ id name images } }`;
+        $("c_result").textContent = JSON.stringify(await gql(q, { input }), null, 2);
+        await loadCategoriesToSelect();
+    };
+    $("btnUpdateCategory").onclick = async () => {
+        const id = $("c_id_upd").value;
+        const input = {
+            name: $("c_name").value || null,
+            images: $("c_images").value || null,
+            userIds: parseIds($("c_userIds").value),
+            productIds: parseIds($("c_productIds").value)
+        };
+        const q = `mutation($id:ID!, $input:CategoryInput!){ updateCategory(id:$id,input:$input){ id name images } }`;
+        $("c_result").textContent = JSON.stringify(await gql(q, { id, input }), null, 2);
+        await loadCategoriesToSelect();
+    };
+    $("btnDeleteCategory").onclick = async () => {
+        const id = $("c_id_upd").value;
+        const q = `mutation($id:ID!){ deleteCategory(id:$id) }`;
+        $("c_result").textContent = JSON.stringify(await gql(q, { id }), null, 2);
+        await loadCategoriesToSelect();
+    };
+
+    // PRODUCT
+    $("btnCreateProduct").onclick = async () => {
+        const input = {
+            title: $("p_title").value,
+            quantity: numberOrNull($("p_quantity").value),
+            description: $("p_desc").value,
+            price: parseFloat($("p_price").value || "0"),
+            userId: emptyToNull($("p_userId").value),
+            categoryIds: parseIds($("p_catIds").value)
+        };
+        const q = `mutation($input:ProductInput!){ createProduct(input:$input){ id title price quantity } }`;
+        $("p_result").textContent = JSON.stringify(await gql(q, { input }), null, 2);
+    };
+    $("btnUpdateProduct").onclick = async () => {
+        const id = $("p_id_upd").value;
+        const input = {
+            title: emptyToNull($("p_title").value),
+            quantity: numberOrNull($("p_quantity").value),
+            description: emptyToNull($("p_desc").value),
+            price: $("p_price").value ? parseFloat($("p_price").value) : null,
+            userId: emptyToNull($("p_userId").value),
+            categoryIds: parseIds($("p_catIds").value)
+        };
+        const q = `mutation($id:ID!, $input:ProductInput!){ updateProduct(id:$id,input:$input){ id title price quantity } }`;
+        $("p_result").textContent = JSON.stringify(await gql(q, { id, input }), null, 2);
+    };
+    $("btnDeleteProduct").onclick = async () => {
+        const id = $("p_id_upd").value;
+        const q = `mutation($id:ID!){ deleteProduct(id:$id) }`;
+        $("p_result").textContent = JSON.stringify(await gql(q, { id }), null, 2);
+    };
+
+    // utils
+    function parseIds(s){ return (s||"").split(",").map(x=>x.trim()).filter(Boolean); }
+    function emptyToNull(v){ return v && v.trim() !== "" ? v : null; }
+    function numberOrNull(v){ return v && v !== "" ? Number(v) : null; }
+
+    // init
+    loadCategoriesToSelect().catch(console.error);
 </script>
+
 </body>
 </html>
