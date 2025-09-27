@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8"/>
+    <title>GraphQL AJAX Demo</title>
+</head>
+<body>
+<h1>Products (price ↑) 23110215 Nguyễn Việt Hiếu</h1>
+<ul id="list"></ul>
+
+<script>
+    const query = `
+    query {
+      productsSortedByPrice { id title price }
+    }
+  `;
+
+    fetch("/graphql", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ query })
+    })
+        .then(r => r.json())
+        .then(({data, errors}) => {
+            if (errors) { console.error(errors); return; }
+            const ul = document.getElementById("list");
+            data.productsSortedByPrice.forEach(p => {
+                const li = document.createElement("li");
+                li.textContent = `${p.id} - ${p.title} - ${p.price}`;
+                ul.appendChild(li);
+            });
+        })
+        .catch(console.error);
+</script>
+</body>
+</html>
